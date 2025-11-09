@@ -1,125 +1,68 @@
 import customtkinter as ctk
-import sqlite3
-import importlib
-import os
-from tkinter import messagebox
+import time
+import threading
+from PIL import Image, ImageTk
 
-# Configurações do banco de dados
-DATABASE_FILE = "app_config.db"
+def mostrar_splash():
+    splash = ctk.CTk()
+    splash.title("PiTU - Inicializando...")
+    splash.geometry("600x400")
+    splash.overrideredirect(True)  # Remove bordas
 
-def create_config_db():
-    con = sqlite3.connect(DATABASE_FILE)
-    cur = con.cursor()
-    # Exemplo: pode expandir para novas opções ou utilitários
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS configs (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            utility TEXT UNIQUE,
-            options TEXT
-        )
-    """)
-    con.commit()
-    con.close()
+    # Centraliza a janela
+    largura_tela = splash.winfo_screenwidth()
+    altura_tela = splash.winfo_screenheight()
+    largura_janela = 600
+    altura_janela = 400
+    pos_x = (largura_tela // 2) - (largura_janela // 2)
+    pos_y = (altura_tela // 2) - (altura_janela // 2)
+    splash.geometry(f"{largura_janela}x{altura_janela}+{pos_x}+{pos_y}")
 
-def get_utility_config(utility_name):
-    con = sqlite3.connect(DATABASE_FILE)
-    cur = con.cursor()
-    cur.execute("SELECT options FROM configs WHERE utility = ?", (utility_name,))
-    row = cur.fetchone()
-    con.close()
-    if row:
-        return row[0]
-    return ""
-
-def set_utility_config(utility_name, options):
-    con = sqlite3.connect(DATABASE_FILE)
-    cur = con.cursor()
-    cur.execute("INSERT OR REPLACE INTO configs (id, utility, options) VALUES ((SELECT id FROM configs WHERE utility = ?), ?, ?)", (utility_name, utility_name, options))
-    con.commit()
-    con.close()
-
-# Função para execução dos utilitários
-def run_utility(module_name):
+    # Carrega imagem splashscreen.png
     try:
-        module = importlib.import_module(module_name)
-        if hasattr(module, "main"):
-            module.main()
-        else:
-            messagebox.showinfo("Erro", f"O utilitário '{module_name}' não possui uma função main()")
-    except Exception as e:
-        messagebox.showerror("Erro", f"Erro ao executar o utilitário '{module_name}': {str(e)}")
+        img = Image.open("splashscreen.png")
+        img = img.resize((600, 400), Image.Resampling.LANCZOS)
+        img_tk = ImageTk.PhotoImage(img)
+        label_img = ctk.CTkLabel(splash, image=img_tk, text="")
+        label_img.pack(fill="both", expand=True)
+    except FileNotFoundError:
+        label_img = ctk.CTkLabel(splash, text="PiTU", font=("Arial", 32))
+        label_img.pack(expand=True)
 
-def get_utilities():
-    # Só "tamanho" por enquanto, mas pode expandir depois listando a pasta
-    utils = []
-    utils_dir = os.path.dirname(os.path.abspath(__file__))
-    for f in os.listdir(utils_dir):
-        if f.endswith(".py") and f not in ["main.py", "__init__.py"]:
-            nome = f.replace(".py", "")
-            utils.append(nome)
-    return utils
+    # Fade-in e Fade-out
+    def animacao():
+        # Fade-in
+        for i in range(0, 101, 5):
+            splash.attributes("-alpha", i / 100)
+            time.sleep(0.05)
 
-class App(ctk.CTk):
-    def __init__(self):
-        super().__init__()
-        self.title("pyTools Frontend")
-        self.geometry("400x250")
-        ctk.set_appearance_mode("system")
-        ctk.set_default_color_theme("blue")
+        time.sleep(2)  # Mantém visível
 
-        self.label_title = ctk.CTkLabel(self, text="Utilitários disponíveis", font=ctk.CTkFont(size=18, weight="bold"))
-        self.label_title.pack(pady=(20,0))
+        # Fade-out
+        for i in range(100, -1, -5):
+            splash.attributes("-alpha", i / 100)
+            time.sleep(0.05)
 
-        self.utility_option = ctk.StringVar(value="")
-        self.utilities = get_utilities()
-        self.optionmenu = ctk.CTkOptionMenu(self, variable=self.utility_option, values=self.utilities)
-        self.optionmenu.pack(pady=10)
+        splash.destroy()
+        abrir_pitu()
 
-        self.btn_run = ctk.CTkButton(self, text="Executar utilitário", command=self.run_selected)
-        self.btn_run.pack(pady=10)
+    threading.Thread(target=animacao, daemon=True).start()
+    splash.mainloop()
 
-        self.btn_options = ctk.CTkButton(self, text="Configurações", command=self.open_options)
-        self.btn_options.pack(pady=5)
+def abrir_pitu():
+    janela = ctk.CTk()
+    janela.title("PiTU - Programa Principal")
+    janela.geometry("1000x700")
 
-    def run_selected(self):
-        utility = self.utility_option.get()
-        if utility:
-            run_utility(utility)
-        else:
-            messagebox.showinfo("Aviso", "Selecione um utilitário.")
+    label = ctk.CTkLabel(janela, text="Bem-vindo ao PiTU!", font=("Arial", 28))
+    label.pack(pady=20)
 
-    def open_options(self):
-        utility = self.utility_option.get()
-        if not utility:
-            messagebox.showinfo("Aviso", "Selecione um utilitário para configurar.")
-            return
-        OptionsWindow(self, utility)
+    # Aqui você adiciona os módulos do PiTU (botões, menus, etc.)
+    # Exemplo:
+    botao = ctk.CTkButton(janela, text="Abrir Calculador de Diretórios")
+    botao.pack(pady=10)
 
-class OptionsWindow(ctk.CTkToplevel):
-    def __init__(self, parent, utility_name):
-        super().__init__(parent)
-        self.title(f"Configurações - {utility_name}")
-        self.geometry("350x180")
-        self.utility_name = utility_name
+    janela.mainloop()
 
-        self.label = ctk.CTkLabel(self, text=f"Configurações para {utility_name}")
-        self.label.pack(pady=10)
-
-        prev_value = get_utility_config(utility_name)
-        self.txt_options = ctk.CTkEntry(self, width=250)
-        self.txt_options.insert(0, prev_value)
-        self.txt_options.pack(pady=10)
-
-        self.btn_save = ctk.CTkButton(self, text="Salvar", command=self.save)
-        self.btn_save.pack(pady=10)
-
-    def save(self):
-        value = self.txt_options.get()
-        set_utility_config(self.utility_name, value)
-        messagebox.showinfo("Configuração", "Opções salvas com sucesso!")
-        self.destroy()
-
-if __name__ == "__main__":
-    create_config_db()
-    app = App()
-    app.mainloop()
+# Inicia com Splash
+mostrar_splash()
